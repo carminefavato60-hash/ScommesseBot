@@ -8,7 +8,7 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, filters
 )
 
-TOKEN = "8622205755:AAF7iBVUB0j3Lru_lvM2KhjfVgqfYohDWiE"               # ⚠️ INSERISCI QUI IL TUO TOKEN
+TOKEN = "8622205755:AAF7iBVUB0j3Lru_lvM2KhjfVgqfYohDWiE               # ⚠️ INSERISCI QUI IL TUO TOKEN
 CHANNEL_PUBLIC = "-1003987538719"       # 📢 IL TUO CANALE PUBBLICO
 CHANNEL_PRIVATE = "-1003880676633"      # 💎 IL TUO CANALE PRIVATO
 TUO_ID = 739892534                      # ✅ IL TUO ID TELEGRAM
@@ -22,7 +22,7 @@ PIANI_VIP = {
 
 logging.basicConfig(level=logging.INFO)
 
-# Stati per le ConversationHandler
+# Stati per le foto
 F_SPORT, F_FOTO, F_STAKE, F_DOVE = range(100, 104)
 
 # -------------------------
@@ -35,7 +35,6 @@ DB_PATH = "data/scommesse.db"
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # Aggiunti msg_pubblico, msg_privato e esito per poter aggiornare i post!
     c.execute("""
         CREATE TABLE IF NOT EXISTS proposte (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +45,7 @@ def init_db():
             esito TEXT DEFAULT 'in_attesa'
         )
     """)
-    # Per chi aveva già il DB vecchio, proviamo ad aggiungere le nuove colonne senza fare crashare tutto
+    # Per sicurezza in caso di database vecchio
     try: c.execute("ALTER TABLE proposte ADD COLUMN msg_pubblico INTEGER DEFAULT 0")
     except: pass
     try: c.execute("ALTER TABLE proposte ADD COLUMN msg_privato INTEGER DEFAULT 0")
@@ -138,8 +137,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🛠 **Comandi Admin:**\n"
             "/nuovafoto - Carica schedina\n"
             "/risultato - Imposta vincente/perdente\n"
-            "/statistiche - Controlla incassi\n"
-            "/cancel - Annulla operazione",
+            "/statistiche - Controlla incassi e iscritti\n"
+            "/cancel - Annulla operazione in corso",
             reply_markup=ReplyKeyboardRemove()
         )
     else:
@@ -248,8 +247,6 @@ async def f_dove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = context.user_data
     d["dove"] = mappa.get(update.message.text.strip(), "pubblico")
     stelle = "⭐" * int(d["stake"])
-    
-    # SALVIAMO LA CAPTION ESATTA CHE USEREMO!
     caption = f"🏟 {d['sport']}\n🎯 Difficoltà: {stelle}"
     pid = salva_proposta_iniziale(d)
 
@@ -267,7 +264,7 @@ async def f_dove(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg_privato_id = msg.message_id
 
     aggiorna_id_messaggi(pid, msg_pubblico_id, msg_privato_id)
-    await update.message.reply_text(f"✅ Schedina #{pid} pubblicata!")
+    await update.message.reply_text(f"✅ Schedina #{pid} pubblicata e pronta per i risultati!")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -275,13 +272,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # -------------------------
-# GESTIONE RISULTATI (VINCENTE/PERDENTE)
+# GESTIONE RISULTATI
 # -------------------------
 @admin_only
 async def comando_risultato(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # Prende le ultime 5 scommesse ancora in attesa
     c.execute("SELECT id, sport, data FROM proposte WHERE esito = 'in_attesa' ORDER BY id DESC LIMIT 5")
     scommesse = c.fetchall()
     conn.close()
@@ -312,10 +308,10 @@ async def gestisci_risultati_callback(update: Update, context: ContextTypes.DEFA
 
     elif data.startswith("esito_"):
         parti = data.split("_")
-        esito_tipo = parti[1] # win, lose, void
+        esito_tipo = parti[1]
         pid = int(parti[2])
 
-        icone = {"win": "✅ <b>VINCENTE</b> ✅", "lose": "❌ <b>PERDENTE</b> ❌", "void": "🔄 <b>RIMBORSATA</b> 🔄"}
+        icone = {"win": "✅ VINCENTE ✅", "lose": "❌ PERDENTE ❌", "void": "🔄 RIMBORSATA 🔄"}
         testo_esito = icone[esito_tipo]
 
         conn = sqlite3.connect(DB_PATH)
@@ -327,23 +323,28 @@ async def gestisci_risultati_callback(update: Update, context: ContextTypes.DEFA
         sport, stake, msg_pubblico, msg_privato = row
         stelle = "⭐" * stake
         
-        # NUOVA CAPTION CON IL RISULTATO!
         nuova_caption = f"🏟 {sport}\n🎯 Difficoltà: {stelle}\n\n{testo_esito}"
 
-        # Aggiorniamo i messaggi su Telegram
-        if msg_pubblico != 0:
-            try: await context.bot.edit_message_caption(chat_id=int(CHANNEL_PUBLIC), message_id=msg_pubblico, caption=nuova_caption, parse_mode="HTML")
-            except: pass
-        if msg_privato != 0:
-            try: await context.bot.edit_message_caption(chat_id=int(CHANNEL_PRIVATE), message_id=msg_privato, caption=nuova_caption, parse_mode="HTML")
-            except: pass
+        log_errori = ""
 
-        # Salviamo nel DB l'esito
+        if msg_pubblico and msg_pubblico != 0:
+            try: 
+                await context.bot.edit_message_caption(chat_id=int(CHANNEL_PUBLIC), message_id=msg_pubblico, caption=nuova_caption)
+            except Exception as e: log_errori += f"\nPubblico: {e}"
+
+        if msg_privato and msg_privato != 0:
+            try: 
+                await context.bot.edit_message_caption(chat_id=int(CHANNEL_PRIVATE), message_id=msg_privato, caption=nuova_caption)
+            except Exception as e: log_errori += f"\nPrivato: {e}"
+
         c.execute("UPDATE proposte SET esito = ? WHERE id = ?", (esito_tipo, pid))
         conn.commit()
         conn.close()
 
-        await query.message.edit_text(f"✅ Schedina #{pid} aggiornata come {esito_tipo.upper()} nei canali!")
+        if log_errori == "":
+            await query.message.edit_text(f"✅ Schedina #{pid} aggiornata come {esito_tipo.upper()} nei canali!")
+        else:
+            await query.message.edit_text(f"⚠️ Schedina elaborata, ma errori su Telegram:{log_errori}")
 
 # -------------------------
 # PANNELLO ADMIN & JOBS
@@ -353,15 +354,38 @@ async def statistiche(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM abbonati")
-    tot_abbonati = c.fetchone()[0]
+    tot = c.fetchone()[0]
     c.execute("SELECT COUNT(*) FROM abbonati WHERE data_scadenza > ?", (datetime.now().strftime("%Y-%m-%d %H:%M"),))
     attivi = c.fetchone()[0]
     conn.close()
-    await update.message.reply_text(f"📊 **Statistiche**\n👥 Totale storici: {tot_abbonati}\n✅ Attivi ora: {attivi}")
+    await update.message.reply_text(f"📊 **Statistiche**\n👥 Totale storici: {tot}\n✅ Attivi ora: {attivi}")
 
 async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
-    # (Stesso di prima, controlla e kikka)
-    pass # Ridotto qui per leggibilità, ma su Railway va messo quello intero se serve! (l'ho lasciato nel blocco principale prima)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    adesso = datetime.now()
+    
+    # 1. Trova chi espellere
+    c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ?", (adesso.strftime("%Y-%m-%d %H:%M"),))
+    for utente in c.fetchall():
+        try:
+            await context.bot.ban_chat_member(chat_id=int(CHANNEL_PRIVATE), user_id=utente[0])
+            await context.bot.unban_chat_member(chat_id=int(CHANNEL_PRIVATE), user_id=utente[0])
+            await context.bot.send_message(chat_id=utente[0], text="⚠️ Il tuo VIP è terminato. Usa /vip per rinnovare!")
+            c.execute("DELETE FROM abbonati WHERE user_id = ?", (utente[0],))
+        except: pass
+    
+    # 2. Avvisi 2 giorni prima
+    tra_due_giorni = adesso + timedelta(days=2)
+    c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ? AND avvisato = 0", (tra_due_giorni.strftime("%Y-%m-%d %H:%M"),))
+    for utente in c.fetchall():
+        try:
+            await context.bot.send_message(chat_id=utente[0], text="⏳ Il tuo VIP scadrà tra 2 giorni.\nRinnova con /vip!")
+            c.execute("UPDATE abbonati SET avvisato = 1 WHERE user_id = ?", (utente[0],))
+        except: pass
+
+    conn.commit()
+    conn.close()
 
 # -------------------------
 # MAIN
@@ -393,6 +417,8 @@ def main():
     app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
     app.add_handler(conv_foto)
+
+    app.job_queue.run_repeating(controlla_scadenze, interval=3600, first=10)
 
     print("Bot avviato e pronto!")
     app.run_polling()
