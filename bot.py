@@ -8,7 +8,7 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, filters
 )
 
-TOKEN = "NUOVO_TOKEN_QUI"               # ⚠️ INSERISCI QUI IL TUO TOKEN
+TOKEN = "8622205755:AAF7iBVUB0j3Lru_lvM2KhjfVgqfYohDWiE"  # ⚠️ INSERISCI QUI IL TUO TOKEN
 CHANNEL_PUBLIC = "-1003987538719"       # 📢 IL TUO CANALE PUBBLICO
 CHANNEL_PRIVATE = "-1003880676633"      # 💎 IL TUO CANALE PRIVATO
 TUO_ID = 739892534                      # ✅ IL TUO ID TELEGRAM
