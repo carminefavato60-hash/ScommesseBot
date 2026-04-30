@@ -8,12 +8,11 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, filters
 )
 
-TOKEN = "8622205755:AAF7iBVUB0j3Lru_lvM2KhjfVgqfYohDWiE"               # ⚠️ INSERISCI QUI IL TUO TOKEN
-CHANNEL_PUBLIC = "-1003987538719"       # 📢 IL TUO CANALE PUBBLICO
-CHANNEL_PRIVATE = "-1003880676633"      # 💎 IL TUO CANALE PRIVATO
-TUO_ID = 739892534                      # ✅ IL TUO ID TELEGRAM
+TOKEN = "8622205755:AAF7iBVUB0j3Lru_lvM2KhjfVgqfYohDWiE"  # ⚠️ TOKEN NUOVO DA BOTFATHER
+CHANNEL_PUBLIC = "-1003987538719"
+CHANNEL_PRIVATE = "-1003880676633"
+TUO_ID = 739892534
 
-# ---- IMPOSTAZIONI PIANI VIP ----
 PIANI_VIP = {
     "settimana": {"nome": "1 Settimana", "stelle": 100, "euro": "2,00€", "giorni": 7},
     "mese": {"nome": "1 Mese", "stelle": 250, "euro": "5,00€", "giorni": 30},
@@ -21,12 +20,8 @@ PIANI_VIP = {
 }
 
 logging.basicConfig(level=logging.INFO)
-
 F_SPORT, F_TIPO, F_FOTO, F_STAKE, F_DOVE = range(100, 105)
 
-# -------------------------
-# DATABASE
-# -------------------------
 if not os.path.exists("data"):
     os.makedirs("data")
 DB_PATH = "data/scommesse.db"
@@ -50,7 +45,6 @@ def init_db():
     except: pass
     try: c.execute("ALTER TABLE proposte ADD COLUMN esito TEXT DEFAULT 'in_attesa'")
     except: pass
-
     c.execute("""
         CREATE TABLE IF NOT EXISTS abbonati (
             user_id INTEGER PRIMARY KEY,
@@ -116,17 +110,11 @@ def admin_only(func):
         return await func(update, context)
     return wrapper
 
-# -------------------------
-# Tastiere
-# -------------------------
 def kb_sport(): return ReplyKeyboardMarkup([["⚽ Calcio", "🏀 Basket"], ["🎾 Tennis", "🏆 Altro"]], resize_keyboard=True, one_time_keyboard=True)
 def kb_tipo(): return ReplyKeyboardMarkup([["🎯 Singola", "🔀 Multipla"]], resize_keyboard=True, one_time_keyboard=True)
 def kb_stake(): return ReplyKeyboardMarkup([["1", "2", "3"], ["4", "5"]], resize_keyboard=True, one_time_keyboard=True)
 def kb_dove(): return ReplyKeyboardMarkup([["📢 Pubblico", "💎 Privato"], ["📢💎 Entrambi"]], resize_keyboard=True, one_time_keyboard=True)
 
-# -------------------------
-# COMANDI BASE
-# -------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == TUO_ID:
         await update.message.reply_text(
@@ -178,9 +166,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Annullato.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# -------------------------
-# SISTEMA VIP
-# -------------------------
 async def vip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(f"🥉 1 Settimana - {PIANI_VIP['settimana']['euro']}", callback_data="vip_settimana")],
@@ -255,9 +240,6 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         await context.bot.send_message(chat_id=TUO_ID, text=f"💰 INCASSO: {user.first_name} ha pagato {piano['stelle']} ⭐ ({piano['nome']})!")
     except: pass
 
-# -------------------------
-# FLUSSO FOTO
-# -------------------------
 @admin_only
 async def nuovafoto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -310,9 +292,6 @@ async def f_dove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Schedina #{pid} pubblicata!")
     return ConversationHandler.END
 
-# -------------------------
-# GESTIONE RISULTATI
-# -------------------------
 @admin_only
 async def comando_risultato(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
@@ -374,9 +353,6 @@ async def gestisci_risultati_callback(update: Update, context: ContextTypes.DEFA
         else:
             await query.message.edit_text(f"⚠️ Elaborata ma errori:{log_errori}")
 
-# -------------------------
-# ELIMINA SCHEDINA
-# -------------------------
 @admin_only
 async def elimina_schedina(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
@@ -384,41 +360,27 @@ async def elimina_schedina(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 10")
     scommesse = c.fetchall()
     conn.close()
-
     if not scommesse:
         await update.message.reply_text("Nessuna schedina nel database.")
         return
-
     icone = {"win": "✅", "lose": "❌", "void": "🔄", "in_attesa": "⏳"}
     keyboard = []
     for s in scommesse:
         icona = icone.get(s[3], "⏳")
-        keyboard.append([InlineKeyboardButton(
-            f"🗑 #{s[0]} - {s[1]} {icona} ({s[2]})",
-            callback_data=f"del_ris_{s[0]}"
-        )])
-    await update.message.reply_text(
-        "Seleziona la schedina da eliminare definitivamente:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+        keyboard.append([InlineKeyboardButton(f"🗑 #{s[0]} - {s[1]} {icona} ({s[2]})", callback_data=f"del_ris_{s[0]}")])
+    await update.message.reply_text("Seleziona la schedina da eliminare definitivamente:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def conferma_elimina_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
-
     if data.startswith("del_ris_"):
         pid = data.split("_")[2]
         keyboard = [
             [InlineKeyboardButton("✅ SÌ, ELIMINA", callback_data=f"del_conf_{pid}")],
             [InlineKeyboardButton("❌ No, annulla", callback_data="del_annulla")]
         ]
-        await query.message.edit_text(
-            f"⚠️ Sei sicuro di voler eliminare la schedina #{pid}?\n\n"
-            "Verrà rimossa definitivamente dal database e dallo storico.",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
+        await query.message.edit_text(f"⚠️ Sei sicuro di voler eliminare la schedina #{pid}?\n\nVerrà rimossa definitivamente.", reply_markup=InlineKeyboardMarkup(keyboard))
     elif data.startswith("del_conf_"):
         pid = int(data.split("_")[2])
         conn = sqlite3.connect(DB_PATH)
@@ -427,13 +389,9 @@ async def conferma_elimina_callback(update: Update, context: ContextTypes.DEFAUL
         conn.commit()
         conn.close()
         await query.message.edit_text(f"🗑 Schedina #{pid} eliminata definitivamente!")
-
     elif data == "del_annulla":
         await query.message.edit_text("❌ Eliminazione annullata.")
 
-# -------------------------
-# STORICO
-# -------------------------
 @admin_only
 async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
@@ -444,17 +402,14 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not righe:
         await update.message.reply_text("Nessuna schedina nel database.")
         return
-
     icone = {"win": "✅ VINCENTE", "lose": "❌ PERDENTE", "void": "🔄 RIMBORSATA", "in_attesa": "⏳ In attesa"}
     dove_icone = {"pubblico": "📢", "privato": "💎", "entrambi": "📢💎"}
     tipo_icone = {"Singola": "🎯", "Multipla": "🔀"}
-
     vinte = sum(1 for r in righe if r[4] == "win")
     perse = sum(1 for r in righe if r[4] == "lose")
     rimborsate = sum(1 for r in righe if r[4] == "void")
     in_attesa = sum(1 for r in righe if r[4] == "in_attesa")
     totale_concluse = vinte + perse
-
     testo = "📊 *Storico ultime 20 giocate:*\n\n"
     for r in righe:
         dove_tag = dove_icone.get(r[5], "📢")
@@ -471,29 +426,19 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("""
-        SELECT id, sport, tipo, data, esito FROM proposte
-        WHERE dove IN ('privato', 'entrambi')
-        ORDER BY id DESC LIMIT 20
-    """)
+    c.execute("SELECT id, sport, tipo, data, esito FROM proposte WHERE dove IN ('privato', 'entrambi') ORDER BY id DESC LIMIT 20")
     righe = c.fetchall()
     conn.close()
     if not righe:
         await update.message.reply_text("Nessuna schedina VIP nel database.")
         return
-
     icone = {"win": "✅ VINCENTE", "lose": "❌ PERDENTE", "void": "🔄 RIMBORSATA", "in_attesa": "⏳ In attesa"}
     tipo_icone = {"Singola": "🎯", "Multipla": "🔀"}
     vinte = sum(1 for r in righe if r[4] == "win")
     perse = sum(1 for r in righe if r[4] == "lose")
     rimborsate = sum(1 for r in righe if r[4] == "void")
     totale_concluse = vinte + perse
-
-    testo = (
-        "╔══════════════════════╗\n"
-        "    📊  STORICO RISULTATI  📊\n"
-        "╚══════════════════════╝\n\n"
-    )
+    testo = "╔══════════════════════╗\n    📊  STORICO RISULTATI  📊\n╚══════════════════════╝\n\n"
     for r in righe:
         tipo_tag = tipo_icone.get(r[2], "🎯")
         testo += f"{tipo_tag} {r[1]} — {icone.get(r[4], '⏳')} ({r[3]})\n"
@@ -503,16 +448,12 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         percentuale = round((vinte / totale_concluse) * 100, 1)
         testo += f"📈 *Percentuale successo: {percentuale}%*\n\n"
     testo += "💎 _Questi sono i risultati reali del canale VIP._"
-
     try:
         await context.bot.send_message(chat_id=int(CHANNEL_PRIVATE), text=testo, parse_mode="Markdown")
         await update.message.reply_text("✅ Storico pubblicato nel Canale VIP!")
     except Exception as e:
         await update.message.reply_text(f"❌ Errore: {e}")
 
-# -------------------------
-# STATISTICHE ADMIN
-# -------------------------
 @admin_only
 async def statistiche(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
@@ -522,16 +463,8 @@ async def statistiche(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("SELECT COUNT(*) FROM abbonati WHERE data_scadenza > ?", (datetime.now().strftime("%Y-%m-%d %H:%M"),))
     attivi = c.fetchone()[0]
     conn.close()
-    await update.message.reply_text(
-        f"📊 *Statistiche*\n\n"
-        f"👥 Totale storici: {tot}\n"
-        f"✅ Attivi ora: {attivi}",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text(f"📊 *Statistiche*\n\n👥 Totale storici: {tot}\n✅ Attivi ora: {attivi}", parse_mode="Markdown")
 
-# -------------------------
-# PIN MESSAGGI NEI CANALI
-# -------------------------
 @admin_only
 async def pin_pubblico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = (
@@ -580,9 +513,6 @@ async def pin_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Errore: {e}")
 
-# -------------------------
-# INVITO WHATSAPP
-# -------------------------
 @admin_only
 async def invito(update: Update, context: ContextTypes.DEFAULT_TYPE):
     messaggio = (
@@ -598,20 +528,15 @@ async def invito(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔥 Chi vuole di più può accedere al canale VIP con giocate esclusive\!"
     )
     await update.message.reply_text(
-        "📋 *Copia e manda questo messaggio ai tuoi amici su WhatsApp:*\n\n"
-        f"{messaggio}",
+        "📋 *Copia e manda questo messaggio ai tuoi amici su WhatsApp:*\n\n" + messaggio,
         parse_mode="MarkdownV2",
         disable_web_page_preview=True
     )
 
-# -------------------------
-# CONTROLLO SCADENZE ORARIO
-# -------------------------
 async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     adesso = datetime.now()
-
     c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ?", (adesso.strftime("%Y-%m-%d %H:%M"),))
     for utente in c.fetchall():
         try:
@@ -620,55 +545,26 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=utente[0], text="⚠️ Il tuo VIP è terminato.\nUsa /vip per rinnovare!")
             c.execute("DELETE FROM abbonati WHERE user_id = ?", (utente[0],))
         except: pass
-
     tra_tre_giorni = adesso + timedelta(days=3)
     tra_due_giorni = adesso + timedelta(days=2)
-    c.execute("""
-        SELECT user_id FROM abbonati
-        WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 0
-    """, (tra_due_giorni.strftime("%Y-%m-%d %H:%M"), tra_tre_giorni.strftime("%Y-%m-%d %H:%M")))
+    c.execute("SELECT user_id FROM abbonati WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 0",
+              (tra_due_giorni.strftime("%Y-%m-%d %H:%M"), tra_tre_giorni.strftime("%Y-%m-%d %H:%M")))
     for utente in c.fetchall():
         try:
-            await context.bot.send_message(
-                chat_id=utente[0],
-                text=(
-                    "⏳ *Attenzione!*\n\n"
-                    "Il tuo abbonamento VIP scadrà tra *3 giorni*.\n\n"
-                    "Per non perdere l'accesso al canale rinnova subito!\n\n"
-                    "👉 Scrivi /vip per rinnovare"
-                ),
-                parse_mode="Markdown"
-            )
+            await context.bot.send_message(chat_id=utente[0], text="⏳ *Attenzione!*\n\nIl tuo abbonamento VIP scadrà tra *3 giorni*.\n\nRinnova subito!\n👉 Scrivi /vip", parse_mode="Markdown")
             c.execute("UPDATE abbonati SET avvisato = 1 WHERE user_id = ?", (utente[0],))
         except: pass
-
     tra_un_giorno = adesso + timedelta(days=1)
-    c.execute("""
-        SELECT user_id FROM abbonati
-        WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 1
-    """, (adesso.strftime("%Y-%m-%d %H:%M"), tra_un_giorno.strftime("%Y-%m-%d %H:%M")))
+    c.execute("SELECT user_id FROM abbonati WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 1",
+              (adesso.strftime("%Y-%m-%d %H:%M"), tra_un_giorno.strftime("%Y-%m-%d %H:%M")))
     for utente in c.fetchall():
         try:
-            await context.bot.send_message(
-                chat_id=utente[0],
-                text=(
-                    "🚨 *Ultimo avviso!*\n\n"
-                    "Il tuo abbonamento VIP scade *domani*.\n\n"
-                    "Dopo la scadenza verrai rimosso automaticamente dal canale.\n\n"
-                    "🔥 Rinnova ora prima che sia tardi!\n"
-                    "👉 Scrivi /vip"
-                ),
-                parse_mode="Markdown"
-            )
+            await context.bot.send_message(chat_id=utente[0], text="🚨 *Ultimo avviso!*\n\nIl tuo VIP scade *domani*.\n\n🔥 Rinnova ora!\n👉 Scrivi /vip", parse_mode="Markdown")
             c.execute("UPDATE abbonati SET avvisato = 2 WHERE user_id = ?", (utente[0],))
         except: pass
-
     conn.commit()
     conn.close()
 
-# -------------------------
-# MAIN
-# -------------------------
 def main():
     init_db()
     app = Application.builder().token(TOKEN).build()
@@ -696,17 +592,14 @@ def main():
     app.add_handler(CommandHandler("pinpubblico", pin_pubblico))
     app.add_handler(CommandHandler("pinvip", pin_vip))
     app.add_handler(CommandHandler("invito", invito))
-
     app.add_handler(CallbackQueryHandler(scelta_piano_callback, pattern="^vip_"))
     app.add_handler(CallbackQueryHandler(gestisci_risultati_callback, pattern="^(sel_ris|esito)_"))
     app.add_handler(CallbackQueryHandler(conferma_elimina_callback, pattern="^(del_ris|del_conf|del_annulla)"))
-
     app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
     app.add_handler(conv_foto)
 
     app.job_queue.run_repeating(controlla_scadenze, interval=3600, first=10)
-
     print("✅ Bot avviato e pronto!")
     app.run_polling()
 
