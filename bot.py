@@ -133,6 +133,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🛠 *Comandi Admin:*\n"
             "/nuovafoto - Carica schedina\n"
             "/risultato - Imposta vincente/perdente\n"
+            "/eliminaschedina - Elimina una schedina\n"
             "/storico - Vedi il tuo storico privato\n"
             "/mandastoricoVIP - Pubblica storico nel canale VIP\n"
             "/statistiche - Controlla incassi e iscritti\n"
@@ -362,6 +363,63 @@ async def gestisci_risultati_callback(update: Update, context: ContextTypes.DEFA
             await query.message.edit_text(f"⚠️ Elaborata ma errori:{log_errori}")
 
 # -------------------------
+# ELIMINA SCHEDINA
+# -------------------------
+@admin_only
+async def elimina_schedina(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 10")
+    scommesse = c.fetchall()
+    conn.close()
+
+    if not scommesse:
+        await update.message.reply_text("Nessuna schedina nel database.")
+        return
+
+    icone = {"win": "✅", "lose": "❌", "void": "🔄", "in_attesa": "⏳"}
+    keyboard = []
+    for s in scommesse:
+        icona = icone.get(s[3], "⏳")
+        keyboard.append([InlineKeyboardButton(
+            f"🗑 #{s[0]} - {s[1]} {icona} ({s[2]})",
+            callback_data=f"del_ris_{s[0]}"
+        )])
+    await update.message.reply_text(
+        "Seleziona la schedina da eliminare definitivamente:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def conferma_elimina_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data.startswith("del_ris_"):
+        pid = data.split("_")[2]
+        keyboard = [
+            [InlineKeyboardButton("✅ SÌ, ELIMINA", callback_data=f"del_conf_{pid}")],
+            [InlineKeyboardButton("❌ No, annulla", callback_data="del_annulla")]
+        ]
+        await query.message.edit_text(
+            f"⚠️ Sei sicuro di voler eliminare la schedina #{pid}?\n\n"
+            "Verrà rimossa definitivamente dal database e dallo storico.",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data.startswith("del_conf_"):
+        pid = int(data.split("_")[2])
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("DELETE FROM proposte WHERE id = ?", (pid,))
+        conn.commit()
+        conn.close()
+        await query.message.edit_text(f"🗑 Schedina #{pid} eliminata definitivamente!")
+
+    elif data == "del_annulla":
+        await query.message.edit_text("❌ Eliminazione annullata.")
+
+# -------------------------
 # STORICO
 # -------------------------
 @admin_only
@@ -371,7 +429,6 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 20")
     righe = c.fetchall()
     conn.close()
-
     if not righe:
         await update.message.reply_text("Nessuna schedina nel database.")
         return
@@ -385,14 +442,12 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     testo = "📊 *Storico ultime 20 giocate:*\n\n"
     for r in righe:
-        testo += f"#{r[0]} {r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
-
+        testo += f"{r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}  ⏳ In attesa: {in_attesa}\n"
     if totale_concluse > 0:
         percentuale = round((vinte / totale_concluse) * 100, 1)
         testo += f"📈 *Percentuale successo: {percentuale}%*"
-
     await update.message.reply_text(testo, parse_mode="Markdown")
 
 @admin_only
@@ -402,7 +457,6 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 20")
     righe = c.fetchall()
     conn.close()
-
     if not righe:
         await update.message.reply_text("Nessuna schedina nel database.")
         return
@@ -419,8 +473,7 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "╚══════════════════════╝\n\n"
     )
     for r in righe:
-        testo += f"#{r[0]} {r[1]} — {icone.get(r[3], '⏳')}\n"
-
+        testo += f"{r[1]} — {icone.get(r[3], '⏳')}\n"
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}\n"
     if totale_concluse > 0:
@@ -461,6 +514,7 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
     c = conn.cursor()
     adesso = datetime.now()
 
+    # 1. Espelli chi è scaduto
     c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ?", (adesso.strftime("%Y-%m-%d %H:%M"),))
     for utente in c.fetchall():
         try:
@@ -470,12 +524,48 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
             c.execute("DELETE FROM abbonati WHERE user_id = ?", (utente[0],))
         except: pass
 
+    # 2. Avviso 3 giorni prima (avvisato 0 → 1)
+    tra_tre_giorni = adesso + timedelta(days=3)
     tra_due_giorni = adesso + timedelta(days=2)
-    c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ? AND avvisato = 0", (tra_due_giorni.strftime("%Y-%m-%d %H:%M"),))
+    c.execute("""
+        SELECT user_id FROM abbonati
+        WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 0
+    """, (tra_due_giorni.strftime("%Y-%m-%d %H:%M"), tra_tre_giorni.strftime("%Y-%m-%d %H:%M")))
     for utente in c.fetchall():
         try:
-            await context.bot.send_message(chat_id=utente[0], text="⏳ Il tuo VIP scadrà tra 2 giorni.\nRinnova subito con /vip!")
+            await context.bot.send_message(
+                chat_id=utente[0],
+                text=(
+                    "⏳ *Attenzione!*\n\n"
+                    "Il tuo abbonamento VIP scadrà tra *3 giorni*.\n\n"
+                    "Per non perdere l'accesso al canale rinnova subito!\n\n"
+                    "👉 Scrivi /vip per rinnovare"
+                ),
+                parse_mode="Markdown"
+            )
             c.execute("UPDATE abbonati SET avvisato = 1 WHERE user_id = ?", (utente[0],))
+        except: pass
+
+    # 3. Avviso 1 giorno prima (avvisato 1 → 2)
+    tra_un_giorno = adesso + timedelta(days=1)
+    c.execute("""
+        SELECT user_id FROM abbonati
+        WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 1
+    """, (adesso.strftime("%Y-%m-%d %H:%M"), tra_un_giorno.strftime("%Y-%m-%d %H:%M")))
+    for utente in c.fetchall():
+        try:
+            await context.bot.send_message(
+                chat_id=utente[0],
+                text=(
+                    "🚨 *Ultimo avviso!*\n\n"
+                    "Il tuo abbonamento VIP scade *domani*.\n\n"
+                    "Dopo la scadenza verrai rimosso automaticamente dal canale.\n\n"
+                    "🔥 Rinnova ora prima che sia tardi!\n"
+                    "👉 Scrivi /vip"
+                ),
+                parse_mode="Markdown"
+            )
+            c.execute("UPDATE abbonati SET avvisato = 2 WHERE user_id = ?", (utente[0],))
         except: pass
 
     conn.commit()
@@ -506,9 +596,11 @@ def main():
     app.add_handler(CommandHandler("mandastoricoVIP", manda_storico_vip))
     app.add_handler(CommandHandler("vip", vip_command))
     app.add_handler(CommandHandler("risultato", comando_risultato))
+    app.add_handler(CommandHandler("eliminaschedina", elimina_schedina))
 
     app.add_handler(CallbackQueryHandler(scelta_piano_callback, pattern="^vip_"))
     app.add_handler(CallbackQueryHandler(gestisci_risultati_callback, pattern="^(sel_ris|esito)_"))
+    app.add_handler(CallbackQueryHandler(conferma_elimina_callback, pattern="^(del_ris|del_conf|del_annulla)"))
 
     app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
