@@ -371,6 +371,7 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 20")
     righe = c.fetchall()
     conn.close()
+
     if not righe:
         await update.message.reply_text("Nessuna schedina nel database.")
         return
@@ -385,11 +386,13 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = "📊 *Storico ultime 20 giocate:*\n\n"
     for r in righe:
         testo += f"#{r[0]} {r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
+
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}  ⏳ In attesa: {in_attesa}\n"
     if totale_concluse > 0:
         percentuale = round((vinte / totale_concluse) * 100, 1)
         testo += f"📈 *Percentuale successo: {percentuale}%*"
+
     await update.message.reply_text(testo, parse_mode="Markdown")
 
 @admin_only
@@ -399,6 +402,7 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 20")
     righe = c.fetchall()
     conn.close()
+
     if not righe:
         await update.message.reply_text("Nessuna schedina nel database.")
         return
@@ -416,6 +420,7 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     for r in righe:
         testo += f"#{r[0]} {r[1]} — {icone.get(r[3], '⏳')}\n"
+
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}\n"
     if totale_concluse > 0:
@@ -456,7 +461,6 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
     c = conn.cursor()
     adesso = datetime.now()
 
-    # 1. Espelli chi è scaduto
     c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ?", (adesso.strftime("%Y-%m-%d %H:%M"),))
     for utente in c.fetchall():
         try:
@@ -466,50 +470,12 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
             c.execute("DELETE FROM abbonati WHERE user_id = ?", (utente[0],))
         except: pass
 
-    # 2. Avviso 3 giorni prima (avvisato = 0 → diventa 1)
-    tra_tre_giorni = adesso + timedelta(days=3)
     tra_due_giorni = adesso + timedelta(days=2)
-    c.execute("""
-        SELECT user_id FROM abbonati 
-        WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 0
-    """, (tra_due_giorni.strftime("%Y-%m-%d %H:%M"), tra_tre_giorni.strftime("%Y-%m-%d %H:%M")))
+    c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ? AND avvisato = 0", (tra_due_giorni.strftime("%Y-%m-%d %H:%M"),))
     for utente in c.fetchall():
         try:
-            await context.bot.send_message(
-                chat_id=utente[0],
-                text=(
-                    "⏳ *Attenzione!*\n\n"
-                    "Il tuo abbonamento VIP scadrà tra *3 giorni*.\n\n"
-                    "Per non perdere l'accesso al canale e continuare a ricevere "
-                    "tutte le mie giocate, rinnova subito!\n\n"
-                    "👉 Scrivi /vip per rinnovare"
-                ),
-                parse_mode="Markdown"
-            )
+            await context.bot.send_message(chat_id=utente[0], text="⏳ Il tuo VIP scadrà tra 2 giorni.\nRinnova subito con /vip!")
             c.execute("UPDATE abbonati SET avvisato = 1 WHERE user_id = ?", (utente[0],))
-        except: pass
-
-    # 3. Avviso 1 giorno prima (avvisato = 1 → diventa 2)
-    tra_un_giorno = adesso + timedelta(days=1)
-    c.execute("""
-        SELECT user_id FROM abbonati 
-        WHERE data_scadenza BETWEEN ? AND ? AND avvisato = 1
-    """, (adesso.strftime("%Y-%m-%d %H:%M"), tra_un_giorno.strftime("%Y-%m-%d %H:%M")))
-    for utente in c.fetchall():
-        try:
-            await context.bot.send_message(
-                chat_id=utente[0],
-                text=(
-                    "🚨 *Ultimo avviso!*\n\n"
-                    "Il tuo abbonamento VIP scade *domani*.\n\n"
-                    "Dopo la scadenza verrai rimosso automaticamente dal canale "
-                    "e perderai l'accesso a tutte le mie giocate.\n\n"
-                    "🔥 Rinnova ora prima che sia tardi!\n"
-                    "👉 Scrivi /vip"
-                ),
-                parse_mode="Markdown"
-            )
-            c.execute("UPDATE abbonati SET avvisato = 2 WHERE user_id = ?", (utente[0],))
         except: pass
 
     conn.commit()
