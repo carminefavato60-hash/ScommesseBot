@@ -12,6 +12,7 @@ TOKEN = "8622205755:AAF7iBVUB0j3Lru_lvM2KhjfVgqfYohDWiE"               # ⚠️ 
 CHANNEL_PUBLIC = "-1003987538719"       # 📢 IL TUO CANALE PUBBLICO
 CHANNEL_PRIVATE = "-1003880676633"      # 💎 IL TUO CANALE PRIVATO
 TUO_ID = 739892534                      # ✅ IL TUO ID TELEGRAM
+BOT_USERNAME = "@carmine_scommesse_bot" # 🤖 USERNAME BOT
 
 # ---- IMPOSTAZIONI PIANI VIP ----
 PIANI_VIP = {
@@ -137,6 +138,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/storico - Vedi il tuo storico privato\n"
             "/mandastoricoVIP - Pubblica storico nel canale VIP\n"
             "/statistiche - Controlla incassi e iscritti\n"
+            "/pinpubblico - Fissa messaggio nel canale pubblico\n"
+            "/pinvip - Fissa messaggio nel canale VIP\n"
             "/cancel - Annulla operazione in corso",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode="Markdown"
@@ -426,7 +429,7 @@ async def conferma_elimina_callback(update: Update, context: ContextTypes.DEFAUL
 async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 20")
+    c.execute("SELECT id, sport, data, esito, dove FROM proposte ORDER BY id DESC LIMIT 20")
     righe = c.fetchall()
     conn.close()
     if not righe:
@@ -434,6 +437,8 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     icone = {"win": "✅ VINCENTE", "lose": "❌ PERDENTE", "void": "🔄 RIMBORSATA", "in_attesa": "⏳ In attesa"}
+    dove_icone = {"pubblico": "📢", "privato": "💎", "entrambi": "📢💎"}
+
     vinte = sum(1 for r in righe if r[3] == "win")
     perse = sum(1 for r in righe if r[3] == "lose")
     rimborsate = sum(1 for r in righe if r[3] == "void")
@@ -442,7 +447,8 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     testo = "📊 *Storico ultime 20 giocate:*\n\n"
     for r in righe:
-        testo += f"{r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
+        dove_tag = dove_icone.get(r[4], "📢")
+        testo += f"{dove_tag} {r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}  ⏳ In attesa: {in_attesa}\n"
     if totale_concluse > 0:
@@ -454,11 +460,15 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, sport, data, esito FROM proposte ORDER BY id DESC LIMIT 20")
+    c.execute("""
+        SELECT id, sport, data, esito FROM proposte
+        WHERE dove IN ('privato', 'entrambi')
+        ORDER BY id DESC LIMIT 20
+    """)
     righe = c.fetchall()
     conn.close()
     if not righe:
-        await update.message.reply_text("Nessuna schedina nel database.")
+        await update.message.reply_text("Nessuna schedina VIP nel database.")
         return
 
     icone = {"win": "✅ VINCENTE", "lose": "❌ PERDENTE", "void": "🔄 RIMBORSATA", "in_attesa": "⏳ In attesa"}
@@ -473,7 +483,7 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "╚══════════════════════╝\n\n"
     )
     for r in righe:
-        testo += f"{r[1]} — {icone.get(r[3], '⏳')}\n"
+        testo += f"{r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}\n"
     if totale_concluse > 0:
@@ -507,6 +517,55 @@ async def statistiche(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # -------------------------
+# PIN MESSAGGI NEI CANALI
+# -------------------------
+@admin_only
+async def pin_pubblico(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    testo = (
+        "📢 *BENVENUTO NEL CANALE UFFICIALE*\n\n"
+        "Qui pubblico una selezione delle mie giocate gratuitamente.\n\n"
+        "*Cosa trovi in questo canale:*\n"
+        "⚽ Schedine su Calcio, Basket, Tennis e altri sport\n"
+        "🎯 Difficoltà indicata con le stelline ⭐\n"
+        "✅ Risultati aggiornati in tempo reale\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "💎 *Vuoi accedere a TUTTE le mie giocate?*\n"
+        "Nel canale VIP pubblico schedine esclusive che qui non escono mai.\n\n"
+        f"👉 Scrivimi su {BOT_USERNAME} per abbonarti"
+    )
+    try:
+        msg = await context.bot.send_message(chat_id=int(CHANNEL_PUBLIC), text=testo, parse_mode="Markdown")
+        await context.bot.pin_chat_message(chat_id=int(CHANNEL_PUBLIC), message_id=msg.message_id, disable_notification=True)
+        await update.message.reply_text("✅ Messaggio inviato e fissato nel Canale Pubblico!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Errore: {e}")
+
+@admin_only
+async def pin_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    testo = (
+        "💎 *BENVENUTO NEL CANALE VIP*\n\n"
+        "Sei nel posto giusto. Qui ricevi tutto.\n\n"
+        "✅ Tutte le schedine, nessuna esclusa\n"
+        "✅ Le giocate più profittevoli\n"
+        "✅ Risultati aggiornati in tempo reale\n"
+        "✅ Notifica immediata appena pubblico\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📌 *REGOLE:*\n"
+        "— Non condividere i contenuti di questo canale\n"
+        "— Non screenshottare le schedine\n"
+        "— Chi viola le regole viene rimosso\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🔄 *Per rinnovare il tuo abbonamento:*\n"
+        f"👉 Scrivi {BOT_USERNAME} e usa il comando /vip"
+    )
+    try:
+        msg = await context.bot.send_message(chat_id=int(CHANNEL_PRIVATE), text=testo, parse_mode="Markdown")
+        await context.bot.pin_chat_message(chat_id=int(CHANNEL_PRIVATE), message_id=msg.message_id, disable_notification=True)
+        await update.message.reply_text("✅ Messaggio inviato e fissato nel Canale VIP!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Errore: {e}")
+
+# -------------------------
 # CONTROLLO SCADENZE ORARIO
 # -------------------------
 async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
@@ -514,7 +573,6 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
     c = conn.cursor()
     adesso = datetime.now()
 
-    # 1. Espelli chi è scaduto
     c.execute("SELECT user_id FROM abbonati WHERE data_scadenza < ?", (adesso.strftime("%Y-%m-%d %H:%M"),))
     for utente in c.fetchall():
         try:
@@ -524,7 +582,6 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
             c.execute("DELETE FROM abbonati WHERE user_id = ?", (utente[0],))
         except: pass
 
-    # 2. Avviso 3 giorni prima (avvisato 0 → 1)
     tra_tre_giorni = adesso + timedelta(days=3)
     tra_due_giorni = adesso + timedelta(days=2)
     c.execute("""
@@ -546,7 +603,6 @@ async def controlla_scadenze(context: ContextTypes.DEFAULT_TYPE):
             c.execute("UPDATE abbonati SET avvisato = 1 WHERE user_id = ?", (utente[0],))
         except: pass
 
-    # 3. Avviso 1 giorno prima (avvisato 1 → 2)
     tra_un_giorno = adesso + timedelta(days=1)
     c.execute("""
         SELECT user_id FROM abbonati
@@ -597,6 +653,8 @@ def main():
     app.add_handler(CommandHandler("vip", vip_command))
     app.add_handler(CommandHandler("risultato", comando_risultato))
     app.add_handler(CommandHandler("eliminaschedina", elimina_schedina))
+    app.add_handler(CommandHandler("pinpubblico", pin_pubblico))
+    app.add_handler(CommandHandler("pinvip", pin_vip))
 
     app.add_handler(CallbackQueryHandler(scelta_piano_callback, pattern="^vip_"))
     app.add_handler(CallbackQueryHandler(gestisci_risultati_callback, pattern="^(sel_ris|esito)_"))
@@ -608,7 +666,7 @@ def main():
 
     app.job_queue.run_repeating(controlla_scadenze, interval=3600, first=10)
 
-    print("Bot avviato e pronto!")
+    print("✅ Bot avviato e pronto!")
     app.run_polling()
 
 if __name__ == "__main__":
