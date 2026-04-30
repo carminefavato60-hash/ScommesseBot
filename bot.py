@@ -12,7 +12,6 @@ TOKEN = "8622205755:AAF7iBVUB0j3Lru_lvM2KhjfVgqfYohDWiE"               # ⚠️ 
 CHANNEL_PUBLIC = "-1003987538719"       # 📢 IL TUO CANALE PUBBLICO
 CHANNEL_PRIVATE = "-1003880676633"      # 💎 IL TUO CANALE PRIVATO
 TUO_ID = 739892534                      # ✅ IL TUO ID TELEGRAM
-BOT_USERNAME = "@carmine_scommesse_bot" # 🤖 USERNAME BOT
 
 # ---- IMPOSTAZIONI PIANI VIP ----
 PIANI_VIP = {
@@ -517,24 +516,24 @@ async def statistiche(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # -------------------------
-# PIN MESSAGGI NEI CANALI
+# PIN MESSAGGI NEI CANALI  ✅ FIX USERNAME
 # -------------------------
 @admin_only
 async def pin_pubblico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = (
         "📢 *BENVENUTO NEL CANALE UFFICIALE*\n\n"
-        "Qui pubblico una selezione delle mie giocate gratuitamente.\n\n"
+        "Qui pubblico una selezione delle mie giocate gratuitamente\\.\n\n"
         "*Cosa trovi in questo canale:*\n"
         "⚽ Schedine su Calcio, Basket, Tennis e altri sport\n"
         "🎯 Difficoltà indicata con le stelline ⭐\n"
         "✅ Risultati aggiornati in tempo reale\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "💎 *Vuoi accedere a TUTTE le mie giocate?*\n"
-        "Nel canale VIP pubblico schedine esclusive che qui non escono mai.\n\n"
-        f"👉 Scrivimi su {BOT_USERNAME} per abbonarti"
+        "Nel canale VIP pubblico schedine esclusive che qui non escono mai\\.\n\n"
+        "👉 Scrivimi [qui](https://t.me/carmine_scommesse_bot) per abbonarti"
     )
     try:
-        msg = await context.bot.send_message(chat_id=int(CHANNEL_PUBLIC), text=testo, parse_mode="Markdown")
+        msg = await context.bot.send_message(chat_id=int(CHANNEL_PUBLIC), text=testo, parse_mode="MarkdownV2", disable_web_page_preview=True)
         await context.bot.pin_chat_message(chat_id=int(CHANNEL_PUBLIC), message_id=msg.message_id, disable_notification=True)
         await update.message.reply_text("✅ Messaggio inviato e fissato nel Canale Pubblico!")
     except Exception as e:
@@ -544,7 +543,7 @@ async def pin_pubblico(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def pin_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = (
         "💎 *BENVENUTO NEL CANALE VIP*\n\n"
-        "Sei nel posto giusto. Qui ricevi tutto.\n\n"
+        "Sei nel posto giusto\\. Qui ricevi tutto\\.\n\n"
         "✅ Tutte le schedine, nessuna esclusa\n"
         "✅ Le giocate più profittevoli\n"
         "✅ Risultati aggiornati in tempo reale\n"
@@ -556,10 +555,10 @@ async def pin_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "— Chi viola le regole viene rimosso\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "🔄 *Per rinnovare il tuo abbonamento:*\n"
-        f"👉 Scrivi {BOT_USERNAME} e usa il comando /vip"
+        "👉 Scrivi [qui](https://t.me/carmine_scommesse_bot) e usa il comando /vip"
     )
     try:
-        msg = await context.bot.send_message(chat_id=int(CHANNEL_PRIVATE), text=testo, parse_mode="Markdown")
+        msg = await context.bot.send_message(chat_id=int(CHANNEL_PRIVATE), text=testo, parse_mode="MarkdownV2", disable_web_page_preview=True)
         await context.bot.pin_chat_message(chat_id=int(CHANNEL_PRIVATE), message_id=msg.message_id, disable_notification=True)
         await update.message.reply_text("✅ Messaggio inviato e fissato nel Canale VIP!")
     except Exception as e:
