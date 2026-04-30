@@ -139,6 +139,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/statistiche - Controlla incassi e iscritti\n"
             "/pinpubblico - Fissa messaggio nel canale pubblico\n"
             "/pinvip - Fissa messaggio nel canale VIP\n"
+            "/invito - Genera messaggio invito per il canale pubblico\n"
             "/cancel - Annulla operazione in corso",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode="Markdown"
@@ -516,20 +517,20 @@ async def statistiche(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # -------------------------
-# PIN MESSAGGI NEI CANALI  ✅ FIX USERNAME
+# PIN MESSAGGI NEI CANALI
 # -------------------------
 @admin_only
 async def pin_pubblico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = (
         "📢 *BENVENUTO NEL CANALE UFFICIALE*\n\n"
-        "Qui pubblico una selezione delle mie giocate gratuitamente\\.\n\n"
+        "Qui pubblico una selezione delle mie giocate gratuitamente\.\n\n"
         "*Cosa trovi in questo canale:*\n"
         "⚽ Schedine su Calcio, Basket, Tennis e altri sport\n"
         "🎯 Difficoltà indicata con le stelline ⭐\n"
         "✅ Risultati aggiornati in tempo reale\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "💎 *Vuoi accedere a TUTTE le mie giocate?*\n"
-        "Nel canale VIP pubblico schedine esclusive che qui non escono mai\\.\n\n"
+        "Nel canale VIP pubblico schedine esclusive che qui non escono mai\.\n\n"
         "👉 Scrivimi [qui](https://t.me/carmine_scommesse_bot) per abbonarti"
     )
     try:
@@ -543,7 +544,7 @@ async def pin_pubblico(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def pin_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = (
         "💎 *BENVENUTO NEL CANALE VIP*\n\n"
-        "Sei nel posto giusto\\. Qui ricevi tutto\\.\n\n"
+        "Sei nel posto giusto\. Qui ricevi tutto\.\n\n"
         "✅ Tutte le schedine, nessuna esclusa\n"
         "✅ Le giocate più profittevoli\n"
         "✅ Risultati aggiornati in tempo reale\n"
@@ -563,6 +564,29 @@ async def pin_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Messaggio inviato e fissato nel Canale VIP!")
     except Exception as e:
         await update.message.reply_text(f"❌ Errore: {e}")
+
+# -------------------------
+# INVITO WHATSAPP
+# -------------------------
+@admin_only
+async def invito(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    messaggio = (
+        "👋 Ciao\!\n\n"
+        "Ti segnalo questo canale Telegram dove vengono pubblicati "
+        "pronostici sulle scommesse sportive ⚽🏀🎾\n\n"
+        "✅ Calcio, Basket, Tennis e altri sport\n"
+        "✅ Risultati aggiornati in tempo reale\n"
+        "✅ Difficoltà indicata per ogni giocata\n\n"
+        "📢 Il canale è GRATUITO\!\n\n"
+        "👉 Entra subito [qui](https://t.me/carminescommesae)\n\n"
+        "🔥 Chi vuole di più può accedere al canale VIP con giocate esclusive\!"
+    )
+    await update.message.reply_text(
+        "📋 *Copia e manda questo messaggio ai tuoi amici su WhatsApp:*\n\n"
+        f"{messaggio}",
+        parse_mode="MarkdownV2",
+        disable_web_page_preview=True
+    )
 
 # -------------------------
 # CONTROLLO SCADENZE ORARIO
@@ -654,6 +678,7 @@ def main():
     app.add_handler(CommandHandler("eliminaschedina", elimina_schedina))
     app.add_handler(CommandHandler("pinpubblico", pin_pubblico))
     app.add_handler(CommandHandler("pinvip", pin_vip))
+    app.add_handler(CommandHandler("invito", invito))
 
     app.add_handler(CallbackQueryHandler(scelta_piano_callback, pattern="^vip_"))
     app.add_handler(CallbackQueryHandler(gestisci_risultati_callback, pattern="^(sel_ris|esito)_"))
