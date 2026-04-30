@@ -22,7 +22,7 @@ PIANI_VIP = {
 
 logging.basicConfig(level=logging.INFO)
 
-F_SPORT, F_FOTO, F_STAKE, F_DOVE = range(100, 104)
+F_SPORT, F_TIPO, F_FOTO, F_STAKE, F_DOVE = range(100, 105)
 
 # -------------------------
 # DATABASE
@@ -69,7 +69,7 @@ def salva_proposta_iniziale(d):
     c.execute("""
         INSERT INTO proposte (tipo, sport, partita, pronostico, quota, stake, analisi, dove, data)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, ("foto", d.get("sport"), "—", "—", 0.0, int(d.get("stake", 1)), "", d.get("dove", "pubblico"), datetime.now().strftime("%d/%m/%Y %H:%M")))
+    """, (d.get("tipo", "Singola"), d.get("sport"), "—", "—", 0.0, int(d.get("stake", 1)), "", d.get("dove", "pubblico"), datetime.now().strftime("%d/%m/%Y %H:%M")))
     conn.commit()
     pid = c.lastrowid
     conn.close()
@@ -120,6 +120,7 @@ def admin_only(func):
 # Tastiere
 # -------------------------
 def kb_sport(): return ReplyKeyboardMarkup([["⚽ Calcio", "🏀 Basket"], ["🎾 Tennis", "🏆 Altro"]], resize_keyboard=True, one_time_keyboard=True)
+def kb_tipo(): return ReplyKeyboardMarkup([["🎯 Singola", "🔀 Multipla"]], resize_keyboard=True, one_time_keyboard=True)
 def kb_stake(): return ReplyKeyboardMarkup([["1", "2", "3"], ["4", "5"]], resize_keyboard=True, one_time_keyboard=True)
 def kb_dove(): return ReplyKeyboardMarkup([["📢 Pubblico", "💎 Privato"], ["📢💎 Entrambi"]], resize_keyboard=True, one_time_keyboard=True)
 
@@ -265,13 +266,19 @@ async def nuovafoto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def f_sport(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["sport"] = update.message.text.strip()
+    await update.message.reply_text("🎯 Tipo di giocata:", reply_markup=kb_tipo())
+    return F_TIPO
+
+async def f_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mappa = {"🎯 Singola": "Singola", "🔀 Multipla": "Multipla"}
+    context.user_data["tipo"] = mappa.get(update.message.text.strip(), "Singola")
     await update.message.reply_text("📸 Allega la foto:", reply_markup=ReplyKeyboardRemove())
     return F_FOTO
 
 async def f_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.photo: return F_FOTO
     context.user_data["foto_id"] = update.message.photo[-1].file_id
-    await update.message.reply_text("🎯 Difficoltà (1-5):", reply_markup=kb_stake())
+    await update.message.reply_text("⭐ Difficoltà (1-5):", reply_markup=kb_stake())
     return F_STAKE
 
 async def f_stake(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -284,7 +291,8 @@ async def f_dove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = context.user_data
     d["dove"] = mappa.get(update.message.text.strip(), "pubblico")
     stelle = "⭐" * int(d["stake"])
-    caption = f"🏟 {d['sport']}\n🎯 Difficoltà: {stelle}"
+    tipo_tag = "🎯 Singola" if d.get("tipo") == "Singola" else "🔀 Multipla"
+    caption = f"🏟 {d['sport']}\n{tipo_tag}\n⭐ Difficoltà: {stelle}"
     pid = salva_proposta_iniziale(d)
     await update.message.reply_text("⏳ Pubblicando...", reply_markup=ReplyKeyboardRemove())
 
@@ -341,12 +349,13 @@ async def gestisci_risultati_callback(update: Update, context: ContextTypes.DEFA
 
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT sport, stake, msg_pubblico, msg_privato FROM proposte WHERE id = ?", (pid,))
+        c.execute("SELECT sport, tipo, stake, msg_pubblico, msg_privato FROM proposte WHERE id = ?", (pid,))
         row = c.fetchone()
         if not row: return
-        sport, stake, msg_pubblico, msg_privato = row
+        sport, tipo, stake, msg_pubblico, msg_privato = row
         stelle = "⭐" * stake
-        nuova_caption = f"🏟 {sport}\n🎯 Difficoltà: {stelle}\n\n{testo_esito}"
+        tipo_tag = "🎯 Singola" if tipo == "Singola" else "🔀 Multipla"
+        nuova_caption = f"🏟 {sport}\n{tipo_tag}\n⭐ Difficoltà: {stelle}\n\n{testo_esito}"
         log_errori = ""
 
         if msg_pubblico and msg_pubblico != 0:
@@ -429,7 +438,7 @@ async def conferma_elimina_callback(update: Update, context: ContextTypes.DEFAUL
 async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, sport, data, esito, dove FROM proposte ORDER BY id DESC LIMIT 20")
+    c.execute("SELECT id, sport, tipo, data, esito, dove FROM proposte ORDER BY id DESC LIMIT 20")
     righe = c.fetchall()
     conn.close()
     if not righe:
@@ -438,17 +447,19 @@ async def storico(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     icone = {"win": "✅ VINCENTE", "lose": "❌ PERDENTE", "void": "🔄 RIMBORSATA", "in_attesa": "⏳ In attesa"}
     dove_icone = {"pubblico": "📢", "privato": "💎", "entrambi": "📢💎"}
+    tipo_icone = {"Singola": "🎯", "Multipla": "🔀"}
 
-    vinte = sum(1 for r in righe if r[3] == "win")
-    perse = sum(1 for r in righe if r[3] == "lose")
-    rimborsate = sum(1 for r in righe if r[3] == "void")
-    in_attesa = sum(1 for r in righe if r[3] == "in_attesa")
+    vinte = sum(1 for r in righe if r[4] == "win")
+    perse = sum(1 for r in righe if r[4] == "lose")
+    rimborsate = sum(1 for r in righe if r[4] == "void")
+    in_attesa = sum(1 for r in righe if r[4] == "in_attesa")
     totale_concluse = vinte + perse
 
     testo = "📊 *Storico ultime 20 giocate:*\n\n"
     for r in righe:
-        dove_tag = dove_icone.get(r[4], "📢")
-        testo += f"{dove_tag} {r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
+        dove_tag = dove_icone.get(r[5], "📢")
+        tipo_tag = tipo_icone.get(r[2], "🎯")
+        testo += f"{dove_tag}{tipo_tag} {r[1]} — {icone.get(r[4], '⏳')} ({r[3]})\n"
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}  ⏳ In attesa: {in_attesa}\n"
     if totale_concluse > 0:
@@ -461,7 +472,7 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""
-        SELECT id, sport, data, esito FROM proposte
+        SELECT id, sport, tipo, data, esito FROM proposte
         WHERE dove IN ('privato', 'entrambi')
         ORDER BY id DESC LIMIT 20
     """)
@@ -472,9 +483,10 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     icone = {"win": "✅ VINCENTE", "lose": "❌ PERDENTE", "void": "🔄 RIMBORSATA", "in_attesa": "⏳ In attesa"}
-    vinte = sum(1 for r in righe if r[3] == "win")
-    perse = sum(1 for r in righe if r[3] == "lose")
-    rimborsate = sum(1 for r in righe if r[3] == "void")
+    tipo_icone = {"Singola": "🎯", "Multipla": "🔀"}
+    vinte = sum(1 for r in righe if r[4] == "win")
+    perse = sum(1 for r in righe if r[4] == "lose")
+    rimborsate = sum(1 for r in righe if r[4] == "void")
     totale_concluse = vinte + perse
 
     testo = (
@@ -483,7 +495,8 @@ async def manda_storico_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "╚══════════════════════╝\n\n"
     )
     for r in righe:
-        testo += f"{r[1]} — {icone.get(r[3], '⏳')} ({r[2]})\n"
+        tipo_tag = tipo_icone.get(r[2], "🎯")
+        testo += f"{tipo_tag} {r[1]} — {icone.get(r[4], '⏳')} ({r[3]})\n"
     testo += f"\n━━━━━━━━━━━━━━━━━━━\n"
     testo += f"✅ Vinte: {vinte}  ❌ Perse: {perse}  🔄 Rimborsate: {rimborsate}\n"
     if totale_concluse > 0:
@@ -526,7 +539,8 @@ async def pin_pubblico(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Qui pubblico una selezione delle mie giocate gratuitamente\.\n\n"
         "*Cosa trovi in questo canale:*\n"
         "⚽ Schedine su Calcio, Basket, Tennis e altri sport\n"
-        "🎯 Difficoltà indicata con le stelline ⭐\n"
+        "🎯 Singola o 🔀 Multipla indicata su ogni giocata\n"
+        "⭐ Difficoltà indicata con le stelline\n"
         "✅ Risultati aggiornati in tempo reale\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "💎 *Vuoi accedere a TUTTE le mie giocate?*\n"
@@ -546,6 +560,7 @@ async def pin_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💎 *BENVENUTO NEL CANALE VIP*\n\n"
         "Sei nel posto giusto\. Qui ricevi tutto\.\n\n"
         "✅ Tutte le schedine, nessuna esclusa\n"
+        "🎯 Singole e 🔀 Multiple\n"
         "✅ Le giocate più profittevoli\n"
         "✅ Risultati aggiornati in tempo reale\n"
         "✅ Notifica immediata appena pubblico\n\n"
@@ -575,6 +590,7 @@ async def invito(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Ti segnalo questo canale Telegram dove vengono pubblicati "
         "pronostici sulle scommesse sportive ⚽🏀🎾\n\n"
         "✅ Calcio, Basket, Tennis e altri sport\n"
+        "🎯 Giocate Singole e 🔀 Multiple\n"
         "✅ Risultati aggiornati in tempo reale\n"
         "✅ Difficoltà indicata per ogni giocata\n\n"
         "📢 Il canale è GRATUITO\!\n\n"
@@ -661,9 +677,10 @@ def main():
         entry_points=[CommandHandler("nuovafoto", nuovafoto)],
         states={
             F_SPORT: [MessageHandler(filters.TEXT & ~filters.COMMAND, f_sport)],
-            F_FOTO: [MessageHandler(filters.PHOTO, f_foto)],
+            F_TIPO:  [MessageHandler(filters.TEXT & ~filters.COMMAND, f_tipo)],
+            F_FOTO:  [MessageHandler(filters.PHOTO, f_foto)],
             F_STAKE: [MessageHandler(filters.TEXT & ~filters.COMMAND, f_stake)],
-            F_DOVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, f_dove)],
+            F_DOVE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, f_dove)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
